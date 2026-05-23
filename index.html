@@ -3,40 +3,35 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>歌って作曲アプリ（ピッチ補正・操作性完全版）</title>
+  <title>HumMelody - 鼻歌作曲アプリ</title>
   <style>
     body {
       margin: 0; padding: 10px; background: #222; color: #fff;
       font-family: sans-serif; text-align: center;
       height: 100vh; box-sizing: border-box;
       display: flex; flex-direction: column; overflow: hidden;
-      user-select: none; 
+      user-select: none; -webkit-user-select: none;
     }
     .header-bar {
       display: flex; justify-content: space-between; align-items: center;
       margin: 5px 10px 10px 10px; flex-shrink: 0;
     }
-    .header-left {
-      display: flex; align-items: center; gap: 10px;
-    }
-    h1 { font-size: 18px; margin: 0; color: #10b981; }
+    .header-left { display: flex; align-items: center; gap: 15px; }
+    h1 { font-size: 20px; margin: 0; color: #10b981; letter-spacing: 1px; }
     
-    .icon-btn {
-      background: #f59e0b; color: #fff; border: none; border-radius: 6px;
-      width: 30px; height: 30px; font-size: 16px; font-weight: bold; cursor: pointer;
-      display: flex; align-items: center; justify-content: center;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.3); transition: 0.1s;
+    .tool-group {
+      display: flex; gap: 4px; align-items: center;
+      background: #333; padding: 4px; border-radius: 8px;
     }
-    .icon-btn:active { transform: scale(0.95); }
-    
-    .mode-switch { display: flex; gap: 5px; }
-    .mode-switch button {
-      padding: 6px 15px; font-size: 14px; font-weight: bold; background: #444; 
-      color: #ccc; border: 2px solid #555; border-radius: 20px; cursor: pointer; transition: 0.2s;
+    .tool-btn {
+      width: 38px; height: 38px; font-size: 18px;
+      background: transparent; color: #fff; border: none; border-radius: 6px;
+      cursor: pointer; transition: 0.1s; display: flex; align-items: center; justify-content: center;
     }
-    .mode-switch button.active {
-      background: #3b82f6; color: #fff; border-color: #60a5fa; box-shadow: 0 0 8px rgba(59, 130, 246, 0.5);
-    }
+    .tool-btn:hover { background: #4b5563; }
+    .tool-btn:active { transform: scale(0.95); }
+    .tool-btn.active { background: #3b82f6; box-shadow: 0 0 6px rgba(59, 130, 246, 0.6); }
+    .divider { width: 1px; height: 24px; background: #555; margin: 0 2px; }
 
     select {
       padding: 6px 12px; font-size: 14px; font-weight: bold; background: #444;
@@ -56,7 +51,7 @@
       flex-wrap: wrap; flex-shrink: 0;
     }
     button.control-btn {
-      padding: 10px 15px; font-size: 15px; font-weight: bold; background: #10b981;
+      padding: 10px 20px; font-size: 15px; font-weight: bold; background: #10b981;
       color: white; border: none; border-radius: 20px; cursor: pointer;
       box-shadow: 0 4px 6px rgba(0,0,0,0.3);
     }
@@ -78,15 +73,15 @@
   <div class="header-bar">
     <div class="header-left">
       <h1>HumMelody</h1>
-      <button id="undoBtn" class="icon-btn" title="元に戻す">↩</button>
-      <button id="redoBtn" class="icon-btn" title="やり直す">↪</button>
+      <div class="tool-group">
+        <button id="undoBtn" class="tool-btn" title="元に戻す (Ctrl+Z)">↩</button>
+        <button id="redoBtn" class="tool-btn" title="やり直す (Ctrl+Y)">↪</button>
+        <div class="divider"></div>
+        <button id="modeSelect" class="tool-btn active" title="選択・移動">👆</button>
+        <button id="modePen" class="tool-btn" title="ペンで作成">✏️</button>
+      </div>
     </div>
     
-    <div class="mode-switch">
-      <button id="modeSelect" class="active">👆 選択・移動</button>
-      <button id="modePen">✏️ ペン</button>
-    </div>
-
     <select id="dataFileSelect">
       <option value="slot1">ファイル 1</option>
       <option value="slot2">ファイル 2</option>
@@ -111,7 +106,6 @@
   </div>
   
   <script>
-    // --- 定数・初期設定 ---
     const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
     function hzToNote(frequency) {
       if (!frequency || frequency <= 0) return null;
@@ -139,59 +133,40 @@
       return sampleRate / maxpos;
     }
 
-    const recordBtn = document.getElementById("recordBtn");
-    const playBtn = document.getElementById("playBtn");
-    const stopBtn = document.getElementById("stopBtn");
-    const undoBtn = document.getElementById("undoBtn");
-    const redoBtn = document.getElementById("redoBtn");
-    const statusDiv = document.getElementById("status");
-    const canvas = document.getElementById("monitorCanvas");
-    const ctx = canvas.getContext("2d");
-    const dataFileSelect = document.getElementById("dataFileSelect");
-    const contextMenu = document.getElementById("contextMenu");
+    const recordBtn = document.getElementById("recordBtn"); const playBtn = document.getElementById("playBtn"); const stopBtn = document.getElementById("stopBtn");
+    const undoBtn = document.getElementById("undoBtn"); const redoBtn = document.getElementById("redoBtn");
+    const statusDiv = document.getElementById("status"); const canvas = document.getElementById("monitorCanvas"); const ctx = canvas.getContext("2d");
+    const dataFileSelect = document.getElementById("dataFileSelect"); const contextMenu = document.getElementById("contextMenu");
     
-    // モード管理
     let editMode = "select"; 
-    const modeSelectBtn = document.getElementById("modeSelect");
-    const modePenBtn = document.getElementById("modePen");
+    const modeSelectBtn = document.getElementById("modeSelect"); const modePenBtn = document.getElementById("modePen");
     modeSelectBtn.addEventListener("click", () => { editMode = "select"; modeSelectBtn.classList.add("active"); modePenBtn.classList.remove("active"); canvas.style.cursor = "crosshair"; });
     modePenBtn.addEventListener("click", () => { editMode = "pen"; modePenBtn.classList.add("active"); modeSelectBtn.classList.remove("active"); canvas.style.cursor = "cell"; });
 
-    const KEYBOARD_WIDTH = 40; 
-    const baseMinNote = 48; // C3
-    const baseMaxNote = 84; // C6
-    const noteRange = baseMaxNote - baseMinNote + 1; // 37
-    const GRID_SIZE = 30;  // 1拍の幅
-    const SNAP_DIST = 6;   // 吸着距離
+    const KEYBOARD_WIDTH = 40; const baseMinNote = 48; const baseMaxNote = 84; const noteRange = baseMaxNote - baseMinNote + 1; 
+    const GRID_SIZE = 30; const SNAP_DIST = 6;   
 
     let audioCtx = null, analyser = null, isRecording = false, animationId = null;
-    let savedData = { "slot1": [], "slot2": [], "slot3": [] }; let currentSlot = "slot1";
-    let historyData = []; let editableNotes = []; 
-
-    let undoStack = []; let redoStack = [];
-    let clipboardNotes = []; let contextMenuPos = { x: 0, y: 0 };
-    let pitchBuffer = []; 
-    const SMOOTHING_FRAMES = 11; // ★変更：録音時の安定度を高めるためにフレーム数を増加
-    let lastValidPitchNote = null; // ★追加：ノイズ判定用
+    let savedData = { "slot1": [], "slot2": [], "slot3": [] }; let currentSlot = "slot1"; let historyData = []; let editableNotes = []; 
+    let undoStack = []; let redoStack = []; let clipboardNotes = []; let contextMenuPos = { x: 0, y: 0 };
+    
+    let pitchBuffer = []; const SMOOTHING_FRAMES = 5; let lastValidPitchNote = null; 
 
     let isPlaying = false; let isPaused = false; let playStartTime = 0; let playheadX = 0; let recordingStartX = 0; let scheduledNodes = []; 
     let scrollX = 0; let scrollY = 0; let scaleY = 1.0; 
-
     let isPanning = false; let panStartX = 0; let panStartY = 0; let panStartScrollX = 0; let panStartScrollY = 0; let hasMoved = false; let clickButton = 0; 
     let isSelecting = false; let selectionStart = { x: 0, y: 0 }; let selectionEnd = { x: 0, y: 0 }; let selectedNotes = []; 
-    let draggingNote = null; let dragOffsetX = 0; let lastTapTime = 0; let lastTappedNote = null; let hoveredNote = null; let initialNotesState = null; 
-    let isCreatingNote = false;
+    let draggingNote = null; let dragOffsetX = 0; let lastTapTime = 0; let lastTappedNote = null; let hoveredNote = null; let initialNotesState = null; let isCreatingNote = false;
 
-    // --- セーブ・ロード ---
+    let longPressTimer = null;
+    let isLongPressTriggered = false;
+
     function loadData() {
       const stored = localStorage.getItem('composerAppSaves');
       if (stored) savedData = JSON.parse(stored);
       editableNotes = savedData[currentSlot] || [];
       const viewState = localStorage.getItem('composerViewState');
-      if (viewState) {
-        const state = JSON.parse(viewState);
-        scrollX = state.x || 0; scrollY = state.y || 0; scaleY = state.scale || 1.0;
-      }
+      if (viewState) { const state = JSON.parse(viewState); scrollX = state.x || 0; scrollY = state.y || 0; scaleY = state.scale || 1.0; }
     }
     function saveData() {
       savedData[currentSlot] = editableNotes; localStorage.setItem('composerAppSaves', JSON.stringify(savedData));
@@ -199,9 +174,7 @@
     }
     function pushHistory() { undoStack.push(JSON.stringify(editableNotes)); redoStack = []; }
 
-    // ★追加：リロード直前に状態を確実に保存
     window.addEventListener('beforeunload', saveData);
-
     dataFileSelect.addEventListener("change", (e) => {
       if (isRecording || isPlaying) stopPlayback();
       if (isRecording) { isRecording = false; recordBtn.textContent = "録音開始"; recordBtn.classList.remove("recording"); }
@@ -209,19 +182,14 @@
       undoStack = []; redoStack = []; selectedNotes = []; playheadX = 0; historyData = []; draw();
     });
 
-    // --- Undo / Redo ---
-    function performUndo() {
-      if (undoStack.length > 0) { redoStack.push(JSON.stringify(editableNotes)); editableNotes = JSON.parse(undoStack.pop()); selectedNotes = []; saveData(); draw(); }
-    }
-    function performRedo() {
-      if (redoStack.length > 0) { undoStack.push(JSON.stringify(editableNotes)); editableNotes = JSON.parse(redoStack.pop()); selectedNotes = []; saveData(); draw(); }
-    }
+    function performUndo() { if (undoStack.length > 0) { redoStack.push(JSON.stringify(editableNotes)); editableNotes = JSON.parse(undoStack.pop()); selectedNotes = []; saveData(); draw(); } }
+    function performRedo() { if (redoStack.length > 0) { undoStack.push(JSON.stringify(editableNotes)); editableNotes = JSON.parse(redoStack.pop()); selectedNotes = []; saveData(); draw(); } }
     undoBtn.addEventListener("click", performUndo); redoBtn.addEventListener("click", performRedo);
 
     window.addEventListener('keydown', (e) => {
       if (isRecording) return; 
       if (e.ctrlKey || e.metaKey) {
-        if (e.key === 'z' || e.key === 'Z') { e.preventDefault(); if (e.shiftKey) performRedo(); else performUndo(); } 
+        if (e.key === 'z' || e.key === 'Z') { e.preventDefault(); e.shiftKey ? performRedo() : performUndo(); } 
         else if (e.key === 'y' || e.key === 'Y') { e.preventDefault(); performRedo(); }
       }
       if (e.key === 'Backspace' || e.key === 'Delete') {
@@ -231,64 +199,57 @@
 
     canvas.addEventListener('wheel', (e) => {
       e.preventDefault();
-      const rowHeight = (canvas.height / noteRange) * scaleY;
-      
-      if (e.ctrlKey || e.metaKey) {
-        scaleY = Math.max(0.3, Math.min(3.0, scaleY - e.deltaY * 0.005));
-      } else {
-        scrollX = Math.max(0, scrollX + e.deltaX);
-        scrollY -= e.deltaY;
-      }
-      
+      if (e.ctrlKey || e.metaKey) scaleY = Math.max(0.3, Math.min(3.0, scaleY - e.deltaY * 0.005));
+      else { scrollX = Math.max(0, scrollX + e.deltaX); scrollY -= e.deltaY; }
       const newRowHeight = (canvas.height / noteRange) * scaleY;
       const maxY = (127 - baseMinNote + 2) * newRowHeight - canvas.height; 
       const minY = -(baseMinNote + 1) * newRowHeight; 
-      
-      if (scrollY > maxY) scrollY = maxY;
-      if (scrollY < minY) scrollY = minY;
-
+      if (scrollY > maxY) scrollY = maxY; if (scrollY < minY) scrollY = minY;
       saveData(); draw();
     }, { passive: false });
 
-    // --- コンテキストメニュー ---
+    function showContextMenu(clientX, clientY, canvasX, canvasY) {
+      contextMenuPos = { x: canvasX, y: canvasY };
+      document.getElementById("menuCut").classList.toggle("disabled", selectedNotes.length === 0);
+      document.getElementById("menuCopy").classList.toggle("disabled", selectedNotes.length === 0);
+      document.getElementById("menuDelete").classList.toggle("disabled", selectedNotes.length === 0);
+      document.getElementById("menuPaste").classList.toggle("disabled", clipboardNotes.length === 0);
+      
+      let drawX = clientX; let drawY = clientY;
+      if (drawX + 120 > window.innerWidth) drawX = window.innerWidth - 130;
+      if (drawY + 160 > window.innerHeight) drawY = window.innerHeight - 170;
+
+      contextMenu.style.left = drawX + "px";
+      contextMenu.style.top = drawY + "px";
+      contextMenu.style.display = "block";
+    }
+
     window.addEventListener("mousedown", (e) => { if (e.button !== 2 && !e.target.closest('#contextMenu')) contextMenu.style.display = "none"; });
+    window.addEventListener("touchstart", (e) => { if (!e.target.closest('#contextMenu')) contextMenu.style.display = "none"; }, { passive: true });
 
     document.getElementById("menuCopy").addEventListener("click", () => {
-      if (selectedNotes.length > 0) {
-        const minX = Math.min(...selectedNotes.map(n => n.x));
-        clipboardNotes = selectedNotes.map(n => ({ ...n, offsetX: n.x - minX }));
-      }
+      if (selectedNotes.length > 0) { const minX = Math.min(...selectedNotes.map(n => n.x)); clipboardNotes = selectedNotes.map(n => ({ ...n, offsetX: n.x - minX })); }
       contextMenu.style.display = "none";
     });
-
     document.getElementById("menuCut").addEventListener("click", () => {
       if (selectedNotes.length > 0) {
-        pushHistory();
-        const minX = Math.min(...selectedNotes.map(n => n.x));
-        clipboardNotes = selectedNotes.map(n => ({ ...n, offsetX: n.x - minX }));
-        editableNotes = editableNotes.filter(n => !selectedNotes.includes(n));
-        selectedNotes = []; saveData(); draw();
+        pushHistory(); const minX = Math.min(...selectedNotes.map(n => n.x)); clipboardNotes = selectedNotes.map(n => ({ ...n, offsetX: n.x - minX }));
+        editableNotes = editableNotes.filter(n => !selectedNotes.includes(n)); selectedNotes = []; saveData(); draw();
       }
       contextMenu.style.display = "none";
     });
-
     document.getElementById("menuDelete").addEventListener("click", () => {
       if (selectedNotes.length > 0) { pushHistory(); editableNotes = editableNotes.filter(n => !selectedNotes.includes(n)); selectedNotes = []; saveData(); draw(); }
       contextMenu.style.display = "none";
     });
-
     document.getElementById("menuPaste").addEventListener("click", () => {
       if (clipboardNotes.length > 0) {
         pushHistory();
         const rowHeight = (canvas.height / noteRange) * scaleY;
         const targetX = contextMenuPos.x - KEYBOARD_WIDTH + scrollX;
         const targetNoteNum = Math.floor((canvas.height - contextMenuPos.y + scrollY) / rowHeight) + baseMinNote;
-        const originNoteNum = clipboardNotes[0].noteNumber; 
-        const deltaNoteNum = targetNoteNum - originNoteNum;
-        
-        const newNotes = clipboardNotes.map(n => ({
-          x: Math.max(0, targetX + n.offsetX), width: n.width, noteNumber: Math.max(0, Math.min(127, n.noteNumber + deltaNoteNum))
-        }));
+        const originNoteNum = clipboardNotes[0].noteNumber; const deltaNoteNum = targetNoteNum - originNoteNum;
+        const newNotes = clipboardNotes.map(n => ({ x: Math.max(0, targetX + n.offsetX), width: n.width, noteNumber: Math.max(0, Math.min(127, n.noteNumber + deltaNoteNum)) }));
         editableNotes.push(...newNotes); selectedNotes = newNotes; saveData(); draw();
       }
       contextMenu.style.display = "none";
@@ -298,7 +259,6 @@
     window.addEventListener('resize', resizeCanvas); 
     function getLastNoteEnd() { let max = 0; editableNotes.forEach(n => { if (n.x + n.width > max) max = n.x + n.width; }); return max; }
 
-    // --- 録音・再生 ---
     recordBtn.addEventListener("click", async () => {
       if (isPlaying) stopPlayback(); 
       if (isRecording) {
@@ -308,9 +268,7 @@
       } else {
         try {
           if (!audioCtx) { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); analyser = audioCtx.createAnalyser(); analyser.fftSize = 2048; }
-          // iOS Safari等の対策のため、ここで一度AudioContextをResumeする
           if (audioCtx.state === 'suspended') await audioCtx.resume();
-          
           const stream = await navigator.mediaDevices.getUserMedia({ audio: true }); const source = audioCtx.createMediaStreamSource(stream); source.connect(analyser);
           isRecording = true; recordBtn.textContent = "録音停止"; recordBtn.classList.add("recording"); statusDiv.textContent = "声を認識中..."; 
           recordingStartX = playheadX; historyData = []; pitchBuffer = []; lastValidPitchNote = null; hoveredNote = null; selectedNotes = []; update();
@@ -322,39 +280,28 @@
       if (!isRecording) return;
       const buffer = new Float32Array(analyser.fftSize); analyser.getFloatTimeDomainData(buffer);
       const pitch = autoCorrelate(buffer, audioCtx.sampleRate); const note = hzToNote(pitch);
-      
       let rawNoteNum = null;
-      // 声の音域（約80Hz〜1200Hz）のみを拾い、異常な高音・低音を除外
       if (note && pitch > 80 && pitch < 1200) {
         rawNoteNum = note.number;
-        // ★追加：オクターブジャンプ（倍音エラー等のノイズ）を除去するフィルター
-        if (lastValidPitchNote !== null) {
-          const diff = Math.abs(rawNoteNum - lastValidPitchNote);
-          // 急に1オクターブ（12半音）以上離れた場合は、ノイズと見なして直前の音を維持する
-          if (diff >= 10) {
-            rawNoteNum = lastValidPitchNote;
-          }
-        }
+        if (lastValidPitchNote !== null && Math.abs(rawNoteNum - lastValidPitchNote) >= 10) rawNoteNum = lastValidPitchNote;
         lastValidPitchNote = rawNoteNum;
-      } else {
-        lastValidPitchNote = null; // 無音が続いたらリセット
-      }
+      } else lastValidPitchNote = null;
 
-      pitchBuffer.push(rawNoteNum);
-      if (pitchBuffer.length > SMOOTHING_FRAMES) pitchBuffer.shift(); 
-      
+      pitchBuffer.push(rawNoteNum); if (pitchBuffer.length > SMOOTHING_FRAMES) pitchBuffer.shift(); 
       let counts = {}, modeNote = null, maxCount = 0;
       for (let i = 0; i < pitchBuffer.length; i++) {
-        const n = pitchBuffer[i]; counts[n] = (counts[n] || 0) + 1;
-        // 前のフレームと同じ音階なら優先度を上げる（ヒステリシスで音が揺れにくくなる）
-        let weight = (historyData.length > 0 && n === historyData[historyData.length - 1]) ? 1.5 : 1;
-        if (counts[n] * weight > maxCount) { maxCount = counts[n] * weight; modeNote = n; }
+        const n = pitchBuffer[i]; 
+        if (n !== null) { 
+            counts[n] = (counts[n] || 0) + 1; 
+            // ★調整：重みを1.5に下げ、自然な音の切り替わりを許容する
+            let weight = (historyData.length > 0 && n === historyData[historyData.length - 1]) ? 1.5 : 1; 
+            if (counts[n] * weight > maxCount) { maxCount = counts[n] * weight; modeNote = n; } 
+        }
       }
+      if (pitchBuffer.filter(n => n === null).length > Math.floor(SMOOTHING_FRAMES / 2)) modeNote = null;
       
-      if (modeNote !== null && modeNote !== "null") {
-        const name = NOTE_NAMES[modeNote % 12] + (Math.floor(modeNote / 12) - 1);
-        statusDiv.textContent = `音階: ${name}`; historyData.push(modeNote);
-      } else { statusDiv.textContent = "録音中..."; historyData.push(null); }
+      if (modeNote !== null) { statusDiv.textContent = `音階: ${NOTE_NAMES[modeNote % 12] + (Math.floor(modeNote / 12) - 1)}`; historyData.push(modeNote); } 
+      else { statusDiv.textContent = "録音中..."; historyData.push(null); }
       
       playheadX = recordingStartX + historyData.length;
       const maxCanvasHistory = canvas.width - KEYBOARD_WIDTH;
@@ -363,11 +310,8 @@
       draw(); animationId = requestAnimationFrame(update);
     }
 
-    // ★追加：カラオケ採点風の「クオンタイズ（ピッチ整形）」処理
     function convertHistoryToNotes() {
-      let tempNotes = [];
-      let currentNote = null;
-      // まず素直にブロック化
+      let tempNotes = []; let currentNote = null;
       for (let x = 0; x < historyData.length; x++) {
         const n = historyData[x];
         if (n !== null && n >= 0 && n <= 127) {
@@ -378,23 +322,20 @@
       }
       if (currentNote) tempNotes.push(currentNote); historyData = [];
 
-      // 1. 短すぎるゴミブロック（5フレーム未満）を削除
-      let cleanedNotes = tempNotes.filter(n => n.width >= 5);
-
-      // 2. わずかな隙間で途切れた同じ音程のブロックを1つに繋げる（カラオケバーのように滑らかにする）
+      // ★調整：細かい音（スタッカートなど）も残すため、削除基準を「3フレーム未満（ノイズ）」だけに緩和
+      let cleanedNotes = tempNotes.filter(n => n.width >= 3);
+      
       for (let i = 0; i < cleanedNotes.length - 1; i++) {
-          let cur = cleanedNotes[i];
-          let nxt = cleanedNotes[i+1];
-          // 隙間が10フレーム以内で、同じ音階なら合体
-          if (nxt.x - (cur.x + cur.width) <= 10 && cur.noteNumber === nxt.noteNumber) {
-              cur.width = (nxt.x + nxt.width) - cur.x;
-              cleanedNotes.splice(i + 1, 1);
-              i--; // 再チェック
+          let cur = cleanedNotes[i]; let nxt = cleanedNotes[i+1];
+          // ★調整：滑らかになりすぎないよう、わずかな隙間（2フレーム以下）だけを結合する
+          if (nxt.x - (cur.x + cur.width) <= 2 && cur.noteNumber === nxt.noteNumber) {
+              cur.width = (nxt.x + nxt.width) - cur.x; cleanedNotes.splice(i + 1, 1); i--; 
           }
       }
       editableNotes.push(...cleanedNotes);
     }
 
+    // --- 再生 ---
     playBtn.addEventListener("click", async () => {
       if (isRecording || editableNotes.length === 0) return;
       if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -448,17 +389,15 @@
       return x;
     }
 
-    // --- 描画処理 ---
+    // --- 描画 ---
     function draw() {
       const rowHeight = (canvas.height / noteRange) * scaleY; 
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.lineWidth = 1;
-
       for (let n = 0; n <= 127; n++) {
         const y = canvas.height - (n - baseMinNote + 1) * rowHeight + scrollY;
         if (y < -rowHeight || y > canvas.height) continue;
-        const isBlackKey = [1, 3, 6, 8, 10].includes(n % 12);
-        ctx.strokeStyle = isBlackKey ? "#111" : "#333";
+        ctx.strokeStyle = [1, 3, 6, 8, 10].includes(n % 12) ? "#111" : "#333";
         ctx.beginPath(); ctx.moveTo(KEYBOARD_WIDTH, y); ctx.lineTo(canvas.width, y); ctx.stroke();
       }
 
@@ -473,8 +412,7 @@
         const x = KEYBOARD_WIDTH + i * GRID_SIZE - scrollX;
         if (x > KEYBOARD_WIDTH) {
           ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height);
-          ctx.strokeStyle = (i % 4 === 0) ? "#666" : "#2a2a2a";
-          ctx.stroke();
+          ctx.strokeStyle = (i % 4 === 0) ? "#666" : "#2a2a2a"; ctx.stroke();
         }
       }
 
@@ -482,18 +420,12 @@
         const note = editableNotes[i];
         const y = canvas.height - (note.noteNumber - baseMinNote + 1) * rowHeight + scrollY;
         const x = KEYBOARD_WIDTH + note.x - scrollX;
-        
         if (x + note.width > KEYBOARD_WIDTH && x < canvas.width && y > -rowHeight && y < canvas.height) {
-          if (selectedNotes.includes(note)) {
-            ctx.fillStyle = "#8b5cf6"; ctx.strokeStyle = "#fbbf24"; ctx.lineWidth = 2;
-          } else {
-            ctx.fillStyle = (note === hoveredNote) ? "#60a5fa" : "#3b82f6";
-            ctx.strokeStyle = "#1e3a8a"; ctx.lineWidth = 1;
-          }
+          if (selectedNotes.includes(note)) { ctx.fillStyle = "#8b5cf6"; ctx.strokeStyle = "#fbbf24"; ctx.lineWidth = 2; } 
+          else { ctx.fillStyle = (note === hoveredNote) ? "#60a5fa" : "#3b82f6"; ctx.strokeStyle = "#1e3a8a"; ctx.lineWidth = 1; }
           ctx.fillRect(x, y, note.width, rowHeight); ctx.strokeRect(x, y, note.width, rowHeight);
         }
       }
-
       ctx.fillStyle = "#10b981"; 
       for (let i = 0; i < historyData.length; i++) {
         const n = historyData[i];
@@ -537,16 +469,14 @@
         const y = canvas.height - (n - baseMinNote + 1) * rowHeight + scrollY;
         if (y < -rowHeight || y > canvas.height) continue;
         const isBlackKey = [1, 3, 6, 8, 10].includes(n % 12);
-        ctx.fillStyle = isBlackKey ? "#222" : "#eee"; 
-        ctx.fillRect(0, Math.floor(y), KEYBOARD_WIDTH, Math.ceil(rowHeight));
+        ctx.fillStyle = isBlackKey ? "#222" : "#eee"; ctx.fillRect(0, Math.floor(y), KEYBOARD_WIDTH, Math.ceil(rowHeight));
       }
       ctx.strokeStyle = "#000"; ctx.lineWidth = 1; ctx.beginPath();
       for (let n = 0; n <= 127; n++) {
         const y = Math.round(canvas.height - (n - baseMinNote + 1) * rowHeight + scrollY) + 0.5;
         if (y > 0 && y < canvas.height) { ctx.moveTo(0, y); ctx.lineTo(KEYBOARD_WIDTH, y); }
       }
-      ctx.moveTo(KEYBOARD_WIDTH + 0.5, 0); ctx.lineTo(KEYBOARD_WIDTH + 0.5, canvas.height); ctx.stroke();
-      
+      ctx.stroke();
       for (let n = 0; n <= 127; n++) {
         const y = canvas.height - (n - baseMinNote + 1) * rowHeight + scrollY;
         if (y < -rowHeight || y > canvas.height) continue;
@@ -556,60 +486,57 @@
       }
     }
 
-    // --- ドラッグ・操作判定 ---
+    // --- 操作 ---
     function getPointerPos(e) {
-      const rect = canvas.getBoundingClientRect();
-      let clientX, clientY;
-      if (e.touches && e.touches.length > 0) { clientX = e.touches[0].clientX; clientY = e.touches[0].clientY; } 
-      else { clientX = e.clientX; clientY = e.clientY; }
-      return { x: clientX - rect.left, y: clientY - rect.top };
+      const rect = canvas.getBoundingClientRect(); let clientX, clientY;
+      if (e.touches && e.touches.length > 0) { clientX = e.touches[0].clientX; clientY = e.touches[0].clientY; } else { clientX = e.clientX; clientY = e.clientY; }
+      return { x: clientX - rect.left, y: clientY - rect.top, clientX: clientX, clientY: clientY };
     }
 
     function startDrag(e) {
       if (isRecording) return; 
       if (e.target === canvas) e.preventDefault();
-      
-      const pos = getPointerPos(e);
-      const rowHeight = (canvas.height / noteRange) * scaleY;
-      clickButton = e.button || 0;
+      const pos = getPointerPos(e); const rowHeight = (canvas.height / noteRange) * scaleY; clickButton = e.button || 0;
       
       let clickedNote = null;
       for (let i = editableNotes.length - 1; i >= 0; i--) {
         const note = editableNotes[i];
         const noteX = KEYBOARD_WIDTH + note.x - scrollX;
         const noteY = canvas.height - (note.noteNumber - baseMinNote + 1) * rowHeight + scrollY;
-        if (pos.x >= noteX && pos.x <= noteX + note.width && pos.y >= noteY && pos.y <= noteY + rowHeight) {
-          clickedNote = note; break;
-        }
+        if (pos.x >= noteX && pos.x <= noteX + note.width && pos.y >= noteY && pos.y <= noteY + rowHeight) { clickedNote = note; break; }
+      }
+
+      isLongPressTriggered = false;
+      if (e.touches && e.touches.length === 1) {
+        longPressTimer = setTimeout(() => {
+          isLongPressTriggered = true;
+          if (navigator.vibrate) navigator.vibrate(50);
+          
+          if (clickedNote) {
+            if (!selectedNotes.includes(clickedNote)) { selectedNotes = [clickedNote]; draw(); }
+            showContextMenu(pos.clientX, pos.clientY, pos.x, pos.y);
+          } else {
+            isPanning = false; isSelecting = true; selectionStart = pos; selectionEnd = pos; draw();
+          }
+        }, 500); 
       }
 
       if (clickButton === 2) {
-        contextMenuPos = pos;
         if (clickedNote) {
           if (!selectedNotes.includes(clickedNote)) { selectedNotes = [clickedNote]; draw(); }
-          document.getElementById("menuCut").classList.remove("disabled"); document.getElementById("menuCopy").classList.remove("disabled"); document.getElementById("menuDelete").classList.remove("disabled");
         } else {
-          // ★変更：背景を右クリックしても選択を解除しない！
-          document.getElementById("menuCut").classList.toggle("disabled", selectedNotes.length === 0);
-          document.getElementById("menuCopy").classList.toggle("disabled", selectedNotes.length === 0);
-          document.getElementById("menuDelete").classList.toggle("disabled", selectedNotes.length === 0);
-          isPanning = true; panStartX = pos.x; panStartY = pos.y; panStartScrollX = scrollX; hasMoved = false;
+          isPanning = true; panStartX = pos.x; panStartY = pos.y; panStartScrollX = scrollX; panStartScrollY = scrollY; hasMoved = false;
         }
-        document.getElementById("menuPaste").classList.toggle("disabled", clipboardNotes.length === 0);
-        contextMenu.style.left = e.clientX + "px"; contextMenu.style.top = e.clientY + "px"; contextMenu.style.display = "block";
+        showContextMenu(e.clientX, e.clientY, pos.x, pos.y);
         return;
       }
 
       if (clickButton === 0 && editMode === "pen") {
         if (pos.x > KEYBOARD_WIDTH) { 
-          pushHistory();
-          let noteX = pos.x - KEYBOARD_WIDTH + scrollX;
-          noteX = getSnappedX(noteX); 
-          
+          pushHistory(); let noteX = getSnappedX(pos.x - KEYBOARD_WIDTH + scrollX); 
           const noteNum = Math.floor((canvas.height - pos.y + scrollY) / rowHeight) + baseMinNote;
           const newNote = { x: Math.max(0, noteX), width: GRID_SIZE, noteNumber: Math.max(0, Math.min(127, noteNum)) };
-          editableNotes.push(newNote);
-          selectedNotes = [newNote]; draggingNote = newNote; isCreatingNote = true; draw();
+          editableNotes.push(newNote); selectedNotes = [newNote]; draggingNote = newNote; isCreatingNote = true; draw();
         }
         return;
       }
@@ -618,125 +545,96 @@
         if (e.ctrlKey || e.metaKey) {
           if (selectedNotes.includes(clickedNote)) { selectedNotes = selectedNotes.filter(n => n !== clickedNote); draggingNote = null; draw(); return; } 
           else { selectedNotes.push(clickedNote); }
-        } else {
-          if (!selectedNotes.includes(clickedNote)) selectedNotes = [clickedNote];
-        }
-
-        draggingNote = clickedNote;
-        dragOffsetX = pos.x - (KEYBOARD_WIDTH + clickedNote.x - scrollX);
-        selectedNotes.forEach(n => { n._startX = n.x; n._startNoteNum = n.noteNumber; });
-        initialNotesState = JSON.stringify(editableNotes);
-        draw();
+        } else { if (!selectedNotes.includes(clickedNote)) selectedNotes = [clickedNote]; }
+        draggingNote = clickedNote; dragOffsetX = pos.x - (KEYBOARD_WIDTH + clickedNote.x - scrollX);
+        selectedNotes.forEach(n => { n._startX = n.x; n._startNoteNum = n.noteNumber; }); initialNotesState = JSON.stringify(editableNotes); draw();
       } else {
-        panStartX = pos.x; panStartY = pos.y; panStartScrollX = scrollX; hasMoved = false;
-        if (e.touches) { isPanning = true; } 
+        panStartX = pos.x; panStartY = pos.y; panStartScrollX = scrollX; panStartScrollY = scrollY; hasMoved = false;
+        if (e.touches) isPanning = true; 
         else { isSelecting = true; selectionStart = pos; selectionEnd = pos; if (!(e.ctrlKey || e.metaKey)) selectedNotes = []; }
         draw();
       }
     }
 
     function doDrag(e) {
-      const pos = getPointerPos(e);
-      const rowHeight = (canvas.height / noteRange) * scaleY;
-
-      if (isCreatingNote && draggingNote) {
-        e.preventDefault();
-        let endX = pos.x - KEYBOARD_WIDTH + scrollX;
-        endX = getSnappedX(endX); 
-        draggingNote.width = Math.max(GRID_SIZE / 2, endX - draggingNote.x);
-        draw(); return;
+      const pos = getPointerPos(e); const rowHeight = (canvas.height / noteRange) * scaleY;
+      
+      if (e.touches && !isLongPressTriggered) {
+        if (Math.abs(pos.x - panStartX) > 10 || Math.abs(pos.y - panStartY) > 10) clearTimeout(longPressTimer);
       }
 
+      if (isCreatingNote && draggingNote) {
+        e.preventDefault(); let endX = getSnappedX(pos.x - KEYBOARD_WIDTH + scrollX); draggingNote.width = Math.max(GRID_SIZE / 2, endX - draggingNote.x); draw(); return;
+      }
       if (!isSelecting && !draggingNote && !isPanning) {
         if (!isRecording && e.target === canvas) {
           let found = null;
           for (let i = editableNotes.length - 1; i >= 0; i--) {
-            const note = editableNotes[i];
-            const noteX = KEYBOARD_WIDTH + note.x - scrollX;
-            const noteY = canvas.height - (note.noteNumber - baseMinNote + 1) * rowHeight + scrollY;
+            const note = editableNotes[i]; const noteX = KEYBOARD_WIDTH + note.x - scrollX; const noteY = canvas.height - (note.noteNumber - baseMinNote + 1) * rowHeight + scrollY;
             if (pos.x >= noteX && pos.x <= noteX + note.width && pos.y >= noteY && pos.y <= noteY + rowHeight) { found = note; break; }
           }
           if (hoveredNote !== found) { hoveredNote = found; draw(); }
         }
         return;
       }
-
       e.preventDefault(); 
       if (Math.abs(pos.x - panStartX) > 5 || Math.abs(pos.y - panStartY) > 5) { hasMoved = true; contextMenu.style.display = "none"; }
-
+      
       if (isSelecting) {
         selectionEnd = pos;
         const rectX1 = Math.min(selectionStart.x, selectionEnd.x); const rectX2 = Math.max(selectionStart.x, selectionEnd.x);
         const rectY1 = Math.min(selectionStart.y, selectionEnd.y); const rectY2 = Math.max(selectionStart.y, selectionEnd.y);
         selectedNotes = editableNotes.filter(note => {
-          const noteX = KEYBOARD_WIDTH + note.x - scrollX;
-          const noteY = canvas.height - (note.noteNumber - baseMinNote + 1) * rowHeight + scrollY;
+          const noteX = KEYBOARD_WIDTH + note.x - scrollX; const noteY = canvas.height - (note.noteNumber - baseMinNote + 1) * rowHeight + scrollY;
           return !(noteX > rectX2 || noteX + note.width < rectX1 || noteY > rectY2 || noteY + rowHeight < rectY1);
         });
         draw(); return;
       }
-
       if (draggingNote) {
-        let rawX = pos.x - dragOffsetX - KEYBOARD_WIDTH + scrollX;
-        const snappedHead = getSnappedX(rawX);
-        let finalDeltaX = snappedHead - draggingNote._startX;
-        if (snappedHead === rawX) {
-          const rawEndX = rawX + draggingNote.width;
-          const snappedTail = getSnappedX(rawEndX);
-          if (snappedTail !== rawEndX) finalDeltaX = snappedTail - draggingNote.width - draggingNote._startX;
-        }
-
-        const newNoteNum = Math.floor((canvas.height - pos.y + scrollY) / rowHeight) + baseMinNote;
-        const deltaNoteNum = newNoteNum - draggingNote._startNoteNum;
-
-        selectedNotes.forEach(n => {
-          n.x = Math.max(0, n._startX + finalDeltaX);
-          n.noteNumber = Math.max(0, Math.min(127, n._startNoteNum + deltaNoteNum));
-        });
+        let rawX = pos.x - dragOffsetX - KEYBOARD_WIDTH + scrollX; const snappedHead = getSnappedX(rawX); let finalDeltaX = snappedHead - draggingNote._startX;
+        if (snappedHead === rawX) { const rawEndX = rawX + draggingNote.width; const snappedTail = getSnappedX(rawEndX); if (snappedTail !== rawEndX) finalDeltaX = snappedTail - draggingNote.width - draggingNote._startX; }
+        const newNoteNum = Math.floor((canvas.height - pos.y + scrollY) / rowHeight) + baseMinNote; const deltaNoteNum = newNoteNum - draggingNote._startNoteNum;
+        selectedNotes.forEach(n => { n.x = Math.max(0, n._startX + finalDeltaX); n.noteNumber = Math.max(0, Math.min(127, n._startNoteNum + deltaNoteNum)); });
         draw();
       } else if (isPanning && hasMoved) {
-        scrollX = Math.max(0, panStartScrollX - (pos.x - panStartX));
+        scrollX = Math.max(0, panStartScrollX - (pos.x - panStartX)); scrollY = panStartScrollY - (pos.y - panStartY);
+        const newRowHeight = (canvas.height / noteRange) * scaleY; const maxY = (127 - baseMinNote + 2) * newRowHeight - canvas.height; const minY = -(baseMinNote + 1) * newRowHeight;
+        if (scrollY > maxY) scrollY = maxY; if (scrollY < minY) scrollY = minY;
         draw();
       }
     }
 
     function endDrag(e) {
-      if (isCreatingNote) { isCreatingNote = false; draggingNote = null; saveData(); draw(); return; }
+      clearTimeout(longPressTimer);
+      
+      if (isLongPressTriggered && isSelecting) {
+        isSelecting = false;
+        let clientX = e.changedTouches ? e.changedTouches[0].clientX : e.clientX; let clientY = e.changedTouches ? e.changedTouches[0].clientY : e.clientY;
+        showContextMenu(clientX, clientY, selectionEnd.x, selectionEnd.y); draw();
+        isLongPressTriggered = false; return;
+      }
+      isLongPressTriggered = false;
 
+      if (isCreatingNote) { isCreatingNote = false; draggingNote = null; saveData(); draw(); return; }
       if (isSelecting) { 
         isSelecting = false; 
-        if (!hasMoved && clickButton === 0) {
-          playheadX = Math.max(0, selectionStart.x + scrollX - KEYBOARD_WIDTH);
-          if (isPlaying && !isPaused) startPlaybackFrom(playheadX); else stopPlayback();
-          selectedNotes = []; 
-        }
+        if (!hasMoved && clickButton === 0) { playheadX = Math.max(0, selectionStart.x + scrollX - KEYBOARD_WIDTH); if (isPlaying && !isPaused) startPlaybackFrom(playheadX); else stopPlayback(); selectedNotes = []; }
         draw(); return; 
       }
-
       if (!draggingNote && isPanning && !hasMoved && clickButton === 0) {
-        playheadX = Math.max(0, panStartX + scrollX - KEYBOARD_WIDTH);
-        if (isPlaying && !isPaused) startPlaybackFrom(playheadX); else stopPlayback();
+        playheadX = Math.max(0, panStartX + scrollX - KEYBOARD_WIDTH); if (isPlaying && !isPaused) startPlaybackFrom(playheadX); else stopPlayback();
       }
-      
       if (draggingNote) {
-        const currentState = JSON.stringify(editableNotes);
-        if (initialNotesState !== currentState) { undoStack.push(initialNotesState); redoStack = []; saveData(); }
+        if (initialNotesState !== JSON.stringify(editableNotes)) { undoStack.push(initialNotesState); redoStack = []; saveData(); }
         draggingNote = null;
       }
       isPanning = false; draw();
     }
 
     canvas.addEventListener("mouseleave", () => { hoveredNote = null; draw(); });
+    canvas.addEventListener("mousedown", startDrag); window.addEventListener("mousemove", doDrag); window.addEventListener("mouseup", endDrag);
+    canvas.addEventListener("touchstart", startDrag, { passive: false }); window.addEventListener("touchmove", doDrag, { passive: false }); window.addEventListener("touchend", endDrag);
 
-    canvas.addEventListener("mousedown", startDrag);
-    window.addEventListener("mousemove", doDrag);
-    window.addEventListener("mouseup", endDrag);
-
-    canvas.addEventListener("touchstart", startDrag, { passive: false });
-    window.addEventListener("touchmove", doDrag, { passive: false });
-    window.addEventListener("touchend", endDrag);
-
-    // 初期化
     loadData(); resizeCanvas(); 
   </script>
 </body>
